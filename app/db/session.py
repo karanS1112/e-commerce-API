@@ -23,8 +23,15 @@ SessionLocal = sessionmaker(
     autocommit=False,
 )
 
+# Provide a database session to FastAPI endpoints
+def get_db():
+    db = SessionLocal()
 
-
+    try:
+        yield db
+    finally:
+        # Close the session after the request is completed
+        db.close()
 
 
 

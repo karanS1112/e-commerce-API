@@ -1,4 +1,8 @@
 from fastapi import FastAPI
+from app.routers import roles
+from app.routers import permissions
+
+
 # App is an object of fast API I have mentioned the title,description and version which shows on swagger
 app = FastAPI(
     title= "E-commerce Hub API",
@@ -9,5 +13,10 @@ app = FastAPI(
 @app.get("/")
 def home():
     return{
-         "message": "Welcome to E-commerce Hub API"
+         "message": "Welcome to E-commerce Hub API",
+         "status": "Success"
     }
+
+app.include_router(roles.router)
+app.include_router(permissions.router)
+        
