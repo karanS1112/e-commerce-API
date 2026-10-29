@@ -1,6 +1,5 @@
 from fastapi import FastAPI
-from app.routers import roles
-from app.routers import permissions
+from app.routers import roles,permissions,role_permissions,auth
 
 
 # App is an object of fast API I have mentioned the title,description and version which shows on swagger
@@ -16,7 +15,9 @@ def home():
          "message": "Welcome to E-commerce Hub API",
          "status": "Success"
     }
-
+app.include_router(auth.router)
 app.include_router(roles.router)
 app.include_router(permissions.router)
+app.include_router(role_permissions.router)
+
         

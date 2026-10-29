@@ -4,6 +4,7 @@ from app.db.base import Base
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from app.models.role_permission import RolePermission
+    from app.models.user_permission import UserPermission
 
 class Permission(Base):
     __tablename__ = "permissions"
@@ -23,4 +24,7 @@ class Permission(Base):
     )
     permission_role_links: Mapped[list["RolePermission"]] = relationship(
         back_populates="permission"
+    )
+    user_permission_links: Mapped[list['UserPermission']] = relationship(
+        back_populates= "permission"
     )
