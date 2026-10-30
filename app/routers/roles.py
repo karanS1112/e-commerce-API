@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 from typing import Optional
 from app.db.session import get_db
 from app.models.role import Role
+from app.core.permissions import require_permission
+from app.models.user import User
 
 router = APIRouter(
     prefix="/roles",
@@ -10,7 +12,7 @@ router = APIRouter(
 )
 
 @router.get("/")
-def get_all_router(db:Session = Depends(get_db)):
+def get_all_router(db:Session = Depends(get_db), current_user=Depends(require_permission("role_read"))):
      roles = db.query(Role).all()
 
      return {
@@ -26,7 +28,7 @@ def get_all_router(db:Session = Depends(get_db)):
      }
 
 @router.post("/")
-def create_role(name: str,is_active: bool = True, db: Session = Depends(get_db)):
+def create_role(name: str,is_active: bool = True, db: Session = Depends(get_db), current_user=Depends(require_permission("role_create"))):
     # Here i am checking the  exsisting role
     existing_role = db.query(Role).filter(
         Role.name == name
@@ -56,15 +58,13 @@ def create_role(name: str,is_active: bool = True, db: Session = Depends(get_db))
     }
 
 
-from typing import Optional
+
 
 @router.put("/{role_id}")
-def update_role( role_id: int,is_active:bool,name: Optional[str] = None,db: Session = Depends(get_db)
+def update_role(role_id: int,is_active: Optional[bool] = None,name: Optional[str] = None, db: Session = Depends(get_db), _: User = Depends(require_permission("role_update"))
 ):
     # Find role using ID
-    role = db.query(Role).filter(
-        Role.id == role_id
-    ).first()
+    role = db.query(Role).filter(Role.id == role_id).first()
 
     if role is None:
         raise HTTPException(
@@ -72,10 +72,25 @@ def update_role( role_id: int,is_active:bool,name: Optional[str] = None,db: Sess
             detail="Role not found"
         )
 
-    # Check duplicate name only if a new name is provided
+    # Prevent Super Admin deactivation
+    if role.name.strip().lower() == "super admin" and is_active is False:
+        raise HTTPException(
+            status_code=403,
+            detail="Super Admin cannot be deactivated"
+        )
+
+    # Check duplicate name
     if name is not None:
+        name = name.strip()
+
+        if not name:
+            raise HTTPException(
+                status_code=400,
+                detail="Role name cannot be empty"
+            )
+
         existing_role = db.query(Role).filter(
-            Role.name == name,
+            Role.name.ilike(name),
             Role.id != role_id
         ).first()
 
@@ -87,30 +102,15 @@ def update_role( role_id: int,is_active:bool,name: Optional[str] = None,db: Sess
 
         role.name = name
 
-    # Update status only if provided
+    # Update status
     if is_active is not None:
         role.is_active = is_active
 
     db.commit()
     db.refresh(role)
 
-    if is_active is False:
-        message = "Role deactivated successfully"
-    elif is_active is True:
-        message = "Role activated successfully"
-    elif name is not None:
-        message = "Role name updated successfully"
-    else:
-        message = "No changes provided"
-
-    if role.name.lower() == "super admin" and is_active is False:
-        raise HTTPException(
-            status_code=403,
-            detail="Super Admin cannot be deactivated"
-        )    
-
     return {
-        "message": message,
+        "message": "Role updated successfully",
         "data": {
             "id": role.id,
             "name": role.name,

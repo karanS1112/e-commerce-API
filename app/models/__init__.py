@@ -10,3 +10,4 @@ from app.models.role_permission import RolePermission
 from app.models.user import User
 
 from app.models.user_permission import UserPermission
+from app.models.refresh_token import RefreshToken

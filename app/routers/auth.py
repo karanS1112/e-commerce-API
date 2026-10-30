@@ -1,4 +1,3 @@
-
 from fastapi import APIRouter, Depends, Form,HTTPException,status
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy.orm import Session
@@ -8,13 +7,13 @@ from app.db.session import get_db
 from app.models.user import User
 from app.models.role import Role
 from typing import Annotated
-from app.core.security import (hash_password, verify_password,create_access_token,hash_password,create_refresh_token)
+from app.core.security import (hash_password, verify_password,create_access_token,create_refresh_token)
 from fastapi.security import OAuth2PasswordRequestForm
 from datetime import datetime, timezone, timedelta
 from app.core.config import settings
 from app.core.security import get_current_user
 import jwt
-
+from app.models.refresh_token import RefreshToken
 
 # Pydantic model for request validation
 class UserRegister(BaseModel):
@@ -46,11 +45,12 @@ class TokenResponse(BaseModel):
     token_type: str
     token_expiry:datetime    
 
-class RefreshToken(BaseModel):
+class RefreshTokenRequest(BaseModel):
     refresh_token:str
 
 class AccessTokenResponse(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str
     token_expiry: datetime   
 
@@ -63,7 +63,7 @@ router = APIRouter(
 @router.post("/register",response_model=UserResponse,status_code=status.HTTP_201_CREATED
 )
 def register_user(
-    first_name: str = Form(example="Enter First Name"),
+    first_name: str = Form(...),
     last_name: str = Form(...),
     email: str = Form(...),
     password: str = Form( json_schema_extra={"format": "password"}),
@@ -152,88 +152,207 @@ def register_user(
         is_active=new_user.is_active,
     )
 
-@router.post("/login",response_model = TokenResponse)
 
-def login_user(form_data: Annotated[OAuth2PasswordRequestForm,Depends()],db:Session = Depends(get_db)):
+@router.post("/login", response_model=TokenResponse)
+def login_user(form_data: Annotated[OAuth2PasswordRequestForm, Depends()],db: Session = Depends(get_db)):
 
-    #find the user email
-    user = db.query(User).filter(func.lower(User.email) == form_data.username.lower()).first()
-
-    # Error  message show if user email and password not match
-    if  not user or not verify_password(form_data.password,user.password):
-        raise HTTPException(status_code= status.HTTP_401_UNAUTHORIZED,detail="Inavalid emain or passowrd")
-    
-# here is. checking. user is active. or not
-    if not user.is_active:
-        raise HTTPException(
-            status_code= status.HTTP_403_FORBIDDEN,
-            detail= "User account is inactive"
-        )
-    
-    # create the access toke here  which build security file 
-    access_token = create_access_token(data={"sub":str(user.id)})
-    refresh_token = create_refresh_token(data={"sub":str(user.id)})
-
-    token_expiry = datetime.now(timezone.utc) + timedelta(minutes= settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-
-    return {
-        "access_token": access_token,
-        "refresh_token":refresh_token,
-        "token_type": "bearer",
-        "token_expiry": token_expiry,
-
-    }
-
-@router.post("/refresh",response_model=AccessTokenResponse
-)
-def refresh_access_token(request: RefreshToken,db: Session = Depends(get_db),
-):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid or expired refresh token",
-    )
-
-    try:
-        payload = jwt.decode(
-            request.refresh_token,
-            settings.JWT_SECRET_KEY,
-            algorithms=[settings.JWT_ALGORITHM],
-        )
-
-        if not isinstance(payload, dict):
-            raise credentials_exception
-
-        user_id = payload.get("sub")
-        token_type = payload.get("type")
-
-        if token_type != "refresh":
-            raise credentials_exception
-
-        if not isinstance(user_id, str) or not user_id.isdigit():
-            raise credentials_exception
-
-    except jwt.InvalidTokenError:
-        raise credentials_exception
-
+    # Find user by email
     user = db.query(User).filter(
-        User.id == int(user_id)
+        func.lower(User.email) == form_data.username.lower()
     ).first()
 
-    if not user or not user.is_active:
-        raise credentials_exception
+    # Check email and password
+    if not user or not verify_password(form_data.password, user.password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password"
+        )
 
-    new_access_token = create_access_token(
+    # Check account status
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is inactive"
+        )
+
+    # Generate access and refresh tokens
+    access_token = create_access_token(
         data={"sub": str(user.id)}
     )
 
+    refresh_token = create_refresh_token(
+        data={"sub": str(user.id)}
+    )
+
+    # Calculate token expiry
     token_expiry = datetime.now(timezone.utc) + timedelta(
         minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
     )
 
+    refresh_expiry = datetime.now(timezone.utc) + timedelta(
+        days=settings.REFRESH_TOKEN_EXPIRE_DAYS
+    )
+
+    try:
+        # Check existing refresh token
+        db_refresh_token = db.query(RefreshToken).filter(
+            RefreshToken.user_id == user.id
+        ).with_for_update().first()
+
+        if db_refresh_token:
+            db_refresh_token.token = refresh_token
+            db_refresh_token.expires_at = refresh_expiry
+            db_refresh_token.is_revoked = False
+
+        else:
+            db_refresh_token = RefreshToken(
+                user_id=user.id,
+                token=refresh_token,
+                expires_at=refresh_expiry,
+                is_revoked=False
+            )
+            db.add(db_refresh_token)
+
+        db.commit()
+
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to save login session"
+        )
+
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "token_expiry": token_expiry
+    }
+
+
+@router.post("/refresh", response_model=AccessTokenResponse)
+
+@router.post("/refresh", response_model=TokenResponse)
+def refresh_access_token( request: RefreshTokenRequest, db: Session = Depends(get_db)):
+    
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or expired refresh token"
+    )
+
+    # Decode and validate refresh token
+    try:
+        payload = jwt.decode(
+            request.refresh_token,
+            settings.JWT_SECRET_KEY,
+            algorithms=[settings.JWT_ALGORITHM]
+        )
+
+        user_id = payload.get("sub")
+
+        if (
+            payload.get("type") != "refresh"
+            or not isinstance(user_id, str)
+            or not user_id.isdigit()
+        ):
+            raise credentials_exception
+
+        user_id = int(user_id)
+
+    except (jwt.InvalidTokenError, AttributeError):
+        raise credentials_exception
+
+    try:
+        # Find the matching refresh token and lock its database row
+        user_token = db.query(RefreshToken).filter(
+            RefreshToken.user_id == user_id,
+            RefreshToken.token == request.refresh_token
+        ).with_for_update().first()
+
+        if not user_token or user_token.is_revoked:
+            raise credentials_exception
+
+        # Check refresh token expiry in the database
+        if user_token.expires_at <= datetime.now(timezone.utc):
+            raise credentials_exception
+
+        # Check user account
+        user = db.query(User).filter(
+            User.id == user_id
+        ).first()
+
+        if not user or not user.is_active:
+            raise credentials_exception
+
+        # Generate new tokens
+        new_access_token = create_access_token(
+            data={"sub": str(user.id)}
+        )
+
+        new_refresh_token = create_refresh_token(
+            data={"sub": str(user.id)}
+        )
+
+        # Calculate new expiry times
+        token_expiry = datetime.now(timezone.utc) + timedelta(
+            minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
+        )
+
+        refresh_expiry = datetime.now(timezone.utc) + timedelta(
+            days=settings.REFRESH_TOKEN_EXPIRE_DAYS
+        )
+
+        # Replace old refresh token with the new one
+        user_token.token = new_refresh_token
+        user_token.expires_at = refresh_expiry
+        user_token.is_revoked = False
+
+        db.commit()
+
+    except HTTPException:
+        db.rollback()
+        raise
+
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to update refresh token"
+        )
+
     return {
         "access_token": new_access_token,
+        "refresh_token": new_refresh_token,
         "token_type": "bearer",
-        "token_expiry": token_expiry,
+        "token_expiry": token_expiry
+    }
+
+@router.post("/logout")
+def logout_user(request: RefreshTokenRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
+):
+    # Find the refresh token belonging to the currently logged-in user
+    db_refresh_token = db.query(RefreshToken).filter(
+        RefreshToken.token == request.refresh_token,
+        RefreshToken.user_id == current_user.id,
+        RefreshToken.is_revoked.is_(False)
+    ).first()
+
+    # Check whether the refresh token exists and is active
+    if not db_refresh_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or already revoked refresh token"
+        )
+
+    # Revoke the refresh token so it cannot be used again
+    db_refresh_token.is_revoked = True
+
+    # Save the logout changes in the database
+    db.commit()
+
+    # Return logout success message
+    return {
+        "message": "User logged out successfully"
     }
 
 @router.get("/verify", response_model=UserResponse)

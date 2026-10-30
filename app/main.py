@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.routers import roles,permissions,role_permissions,auth
+from app.routers import roles,permissions,role_permissions,auth,admin
 
 
 # App is an object of fast API I have mentioned the title,description and version which shows on swagger
@@ -16,8 +16,7 @@ def home():
          "status": "Success"
     }
 app.include_router(auth.router)
+app.include_router(admin.router)
 app.include_router(roles.router)
 app.include_router(permissions.router)
-app.include_router(role_permissions.router)
-
-        
+app.include_router(role_permissions.router)        

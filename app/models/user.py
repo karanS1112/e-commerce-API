@@ -76,7 +76,25 @@ class User(Base, TimestampMixin):
         nullable=False
     )
 
-    role: Mapped["Role"] = relationship()
+    requested_role_id: Mapped[int | None] = mapped_column(
+        ForeignKey("roles.id"),
+        nullable=True
+    )
+
+    approval_status: Mapped[str] = mapped_column(
+        String(20),
+        default="approved",
+        server_default="approved",
+        nullable=False
+    )
+
+    role: Mapped["Role"] = relationship(
+        foreign_keys=[role_id]
+    )
+
+    requested_role: Mapped["Role | None"] = relationship(
+        foreign_keys=[requested_role_id]
+    )
 
     is_active: Mapped[bool] = mapped_column(
         Boolean,

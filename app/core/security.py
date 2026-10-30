@@ -2,13 +2,14 @@ from pwdlib import PasswordHash
 from datetime import timezone,timedelta,datetime
 from app.core.config import settings
 import jwt
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.user import User
 from fastapi import Depends,HTTPException,status
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+# Swagger will now accept a manually pasted Bearer token.
+bearer_scheme = HTTPBearer(auto_error=False)
 #rthis is return the hashed instance
 password_hash = PasswordHash.recommended()
 #covert the plain text to hash
@@ -33,7 +34,8 @@ def create_access_token(data:dict):
        algorithm= settings.JWT_ALGORITHM
     )
 
-def get_current_user(token:str = Depends(oauth2_scheme),db:Session = Depends(get_db)):
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    db: Session = Depends(get_db)):
 
     # HTTPException  variable create  here bcz it use below many condition so i have craeted  common
     credentials_exception =  HTTPException(
@@ -41,6 +43,12 @@ def get_current_user(token:str = Depends(oauth2_scheme),db:Session = Depends(get
         detail= "Invalid or expire token",
         headers= {"WWW-Authenticate": "Bearer"}
     )
+
+    if credentials is None:
+        raise credentials_exception
+
+    token = credentials.credentials
+
     try:
         # it verify the token signature and  algorithm= hs256
         payload = jwt.decode(token, settings.JWT_SECRET_KEY,algorithms=[settings.JWT_ALGORITHM])
@@ -52,9 +60,6 @@ def get_current_user(token:str = Depends(oauth2_scheme),db:Session = Depends(get
         if token_type != "access":
             raise credentials_exception
         
-        if user_id is None:
-            raise credentials_exception
-        
         if not isinstance(user_id, str) or not user_id.isdigit():
          raise credentials_exception
         
@@ -63,7 +68,6 @@ def get_current_user(token:str = Depends(oauth2_scheme),db:Session = Depends(get
     # get user object
     user = db.query(User).filter(User.id == int(user_id)).first()
     if user is None:
-
         raise credentials_exception
     
     if not user.is_active:
