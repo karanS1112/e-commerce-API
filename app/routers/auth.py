@@ -230,7 +230,6 @@ def login_user(form_data: Annotated[OAuth2PasswordRequestForm, Depends()],db: Se
     }
 
 
-@router.post("/refresh", response_model=AccessTokenResponse)
 
 @router.post("/refresh", response_model=TokenResponse)
 def refresh_access_token( request: RefreshTokenRequest, db: Session = Depends(get_db)):
@@ -240,7 +239,7 @@ def refresh_access_token( request: RefreshTokenRequest, db: Session = Depends(ge
         detail="Invalid or expired refresh token"
     )
 
-    # Decode and validate refresh token
+    # decode and validate refresh token
     try:
         payload = jwt.decode(
             request.refresh_token,
@@ -249,7 +248,7 @@ def refresh_access_token( request: RefreshTokenRequest, db: Session = Depends(ge
         )
 
         user_id = payload.get("sub")
-
+        # checking the type of token
         if (
             payload.get("type") != "refresh"
             or not isinstance(user_id, str)
@@ -272,11 +271,11 @@ def refresh_access_token( request: RefreshTokenRequest, db: Session = Depends(ge
         if not user_token or user_token.is_revoked:
             raise credentials_exception
 
-        # Check refresh token expiry in the database
+        # check refresh token expiry in the database
         if user_token.expires_at <= datetime.now(timezone.utc):
             raise credentials_exception
 
-        # Check user account
+        # check user account
         user = db.query(User).filter(
             User.id == user_id
         ).first()
@@ -284,7 +283,7 @@ def refresh_access_token( request: RefreshTokenRequest, db: Session = Depends(ge
         if not user or not user.is_active:
             raise credentials_exception
 
-        # Generate new tokens
+        # generate new tokens
         new_access_token = create_access_token(
             data={"sub": str(user.id)}
         )
@@ -293,7 +292,7 @@ def refresh_access_token( request: RefreshTokenRequest, db: Session = Depends(ge
             data={"sub": str(user.id)}
         )
 
-        # Calculate new expiry times
+        # calculate new expiry times
         token_expiry = datetime.now(timezone.utc) + timedelta(
             minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
         )
@@ -302,7 +301,7 @@ def refresh_access_token( request: RefreshTokenRequest, db: Session = Depends(ge
             days=settings.REFRESH_TOKEN_EXPIRE_DAYS
         )
 
-        # Replace old refresh token with the new one
+        # replace old refresh token with the new one
         user_token.token = new_refresh_token
         user_token.expires_at = refresh_expiry
         user_token.is_revoked = False

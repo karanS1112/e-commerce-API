@@ -17,4 +17,6 @@ role_create
 role_update
 role_delete
 permission_read
+permission_create
+permission_view
 permission_assign

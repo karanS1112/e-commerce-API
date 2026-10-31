@@ -11,3 +11,5 @@ from app.models.user import User
 
 from app.models.user_permission import UserPermission
 from app.models.refresh_token import RefreshToken
+from app.models.product import Product
+from app.models.product_image import ProductImage
