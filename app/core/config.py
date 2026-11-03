@@ -14,7 +14,8 @@ class Settings(BaseSettings):
     JWT_ALGORITHM:str
     ACCESS_TOKEN_EXPIRE_MINUTES:int
     REFRESH_TOKEN_EXPIRE_DAYS: int 
-
+    PRODUCT_UPLOAD_DIR: str
+    PRODUCT_ALLOWED_EXTENSIONS: str
    # SettingsConfigDict helps to read the env file
     model_config = SettingsConfigDict(
         env_file=".env",

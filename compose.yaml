@@ -6,6 +6,8 @@ services:
     container_name: ecommerce_hub_api
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     environment:
       DB_HOST: db
       DB_PORT: 5432
