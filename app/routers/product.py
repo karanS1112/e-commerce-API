@@ -114,8 +114,8 @@ def create_product(
     }
 
 @router.get("/")
-def get_products( skip: int = 0,limit: int = 10,db: Session = Depends(get_db), current_user=Depends(require_permission("product_read"))):
-    products = db.query(Product).offset(skip).limit(limit).all()
+def get_products( skip: int = 0,limit: int = 10,db: Session = Depends(get_db)):
+    products = db.query(Product).filter(Product.is_active == True).order_by(Product.id.desc()).offset(skip).limit(limit).all()
     return {
         "message": "Products retrieved successfully",
         "data": [
@@ -138,6 +138,33 @@ def get_products( skip: int = 0,limit: int = 10,db: Session = Depends(get_db), c
             for product in products
         ]
     }
+
+@router.get("/admin")
+def get_products( skip: int = 0,limit: int = 10,db: Session = Depends(get_db),current_user=Depends(require_permission("product_read"))):
+    products = db.query(Product).order_by(Product.id.desc()).offset(skip).limit(limit).all()
+    return {
+        "message": "Products retrieved successfully",
+        "data": [
+            {
+                "id": product.id,
+                "name": product.name,
+                "description": product.description,
+                "price": float(product.price),
+                "stock": product.stock,
+                "is_active": product.is_active,
+                "images": [
+                    {
+                        "id": image.id,
+                        "image_url": image.image_url,
+                        "is_primary": image.is_primary
+                    }
+                    for image in product.images
+                ]
+            }
+            for product in products
+        ]
+    }
+
 
 @router.put("/{product_id}")
 def update_product(
@@ -262,11 +289,7 @@ def delete_product(
 
 # single product get by id
 @router.get("/{product_id}")
-def get_product_by_id(
-    product_id: int,
-    db: Session = Depends(get_db),
-    current_user=Depends(require_permission("product_read"))
-):
+def get_product_by_id(product_id: int,db: Session = Depends(get_db)):
     product = db.query(Product).filter(
         Product.id == product_id
     ).first()

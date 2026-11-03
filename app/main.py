@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.routers import roles,permissions,role_permissions,auth,admin,user_permission,product
+from app.routers import roles,permissions,role_permissions,auth,admin,user_permission,product,cart
 
 from fastapi.staticfiles import StaticFiles
 from fastapi.openapi.utils import get_openapi
@@ -25,6 +25,7 @@ def home():
 app.include_router(auth.router)
 app.include_router(admin.router)
 app.include_router(product.router)     
+app.include_router(cart.router)
 
 app.include_router(roles.router)
 app.include_router(permissions.router)
@@ -78,6 +79,3 @@ def custom_openapi():
 
 
 app.openapi = custom_openapi
-
-
-
