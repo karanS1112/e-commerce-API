@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.routers import roles,permissions,role_permissions,auth,admin,user_permission,product,cart
+from app.routers import (roles,permissions,role_permissions,auth,admin,user_permission,product,cart,checkout,orders)
 
 from fastapi.staticfiles import StaticFiles
 from fastapi.openapi.utils import get_openapi
@@ -26,10 +26,11 @@ app.include_router(auth.router)
 app.include_router(admin.router)
 app.include_router(product.router)     
 app.include_router(cart.router)
-
+app.include_router(checkout.router)
+app.include_router(orders.router)
 app.include_router(roles.router)
 app.include_router(permissions.router)
-app.include_router(role_permissions.router)   
+# app.include_router(role_permissions.router)   
 app.include_router(user_permission.router)     
 
 # Customize the OpenAPI schema to display multiple image uploads as file inputs in Swagger.

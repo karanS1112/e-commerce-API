@@ -9,13 +9,20 @@ class Settings(BaseSettings):
     DB_PASSWORD:str
 
     #jwt Setting
-    
     JWT_SECRET_KEY:str
     JWT_ALGORITHM:str
     ACCESS_TOKEN_EXPIRE_MINUTES:int
     REFRESH_TOKEN_EXPIRE_DAYS: int 
+
+     # Product Settings
     PRODUCT_UPLOAD_DIR: str
     PRODUCT_ALLOWED_EXTENSIONS: str
+
+    # Razorpay Settings
+    RAZORPAY_KEY_ID: str
+    RAZORPAY_KEY_SECRET: str
+
+
    # SettingsConfigDict helps to read the env file
     model_config = SettingsConfigDict(
         env_file=".env",
